@@ -56,3 +56,9 @@ vorbereiteter Prioritätskanal. Der Nutzer kann die jeweiligen Android-Einstellu
 direkt öffnen und den eigenen Kanal ausdrücklich vorbereiten. Kein automatischer
 Berechtigungsdialog und keine Umgehung der Android-Systemregeln. Selbst bei allen
 grünen Anzeigen bleibt FCM bestmöglich und kann durch Systemrichtlinien ausfallen.
+
+### Android 8–11
+Exklusive High-Priority-FCM-Verarbeitung über WorkManager stellt den für ältere
+Android-Versionen erforderlichen zeitweiligen Vordergrundhinweis bereit. Ohne
+ForegroundInfo kann ein beschleunigter Job auf Android 11 und älter abstürzen;
+die Prüfung läuft deshalb mit einem generischen, nicht-sensiblen Low-Priority-Kanal.
