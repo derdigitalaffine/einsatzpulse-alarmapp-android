@@ -48,6 +48,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Determine prerelease tag
+        id: release
+        run: echo "tag=${GITHUB_REF_NAME#release/}" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           name: einsatzpulse-alarm-debug-apk
@@ -58,9 +61,13 @@ jobs:
           cp artifacts/app-debug.apk "publish/einsatzpulse-alarm-${GITHUB_REF_NAME#release/}.apk"
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: EinsatzPulse Alarm ${{ github.ref_name }}
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: EinsatzPulse Alarm ${{ steps.release.outputs.tag }}
           prerelease: true
           generate_release_notes: true
+          body: |
+            Vorabversion mit temporärer Android-Debugsignatur, nicht für verbindliche BOS-Alarmierung.
+            FCM setzt eine konfigurierte Firebase-App und das serverseitige Dienstkonto voraus.
+            Auf echten Android-Geräten einschließlich Nicht-stören-Modus und Sperrbildschirm prüfen.
           files: publish/*.apk
           fail_on_unmatched_files: true
