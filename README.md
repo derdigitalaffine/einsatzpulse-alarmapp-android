@@ -1,5 +1,7 @@
 # EinsatzPulse Alarm · Android
 
+**Aktueller Stand: v0.2.0-beta.1** – priorisierte WorkManager-Verarbeitung, pro Einheit getrennte Benachrichtigungen, klare Testalarme und Android-Gerätebereitschaft.
+
 Native **Android-Alarm-App für EinsatzPulse** auf Kotlin/Jetpack Compose + Material 3.
 Eigenes Projekt/Repository nach dem Gradle-/APK-CI-Muster von Tromuwelle Android.
 **Keine WebView**, keine eingebetteten Passwörter und keine universelle Ausnahme von Android-Ruhemodi.
@@ -46,3 +48,11 @@ Produktive APKs benötigen einen eigenen gesicherten Release-Keystore und reale 
 - Dieselbe Einsatz-/Einheitenkombination wird auf Android 24 Stunden nicht erneut akustisch alarmiert; andere Einheiten desselben Einsatzes besitzen getrennte Notification-IDs und PendingIntents.
 - Ein Web-initiierter **TESTALARM – KEIN EINSATZ** erzeugt keine Einsatzdaten und besitzt keine Teilnahmeaktionen. Nur mit vorbereitetem Firebase-Server nutzbar.
 - Android-Systemausnahmen für „Nicht stören“ sind weiterhin freiwillig und keine Garantie für die Übersteuerung des Gerätes.
+
+## Android-Gerätebereitschaft (v0.2)
+Unter **Gerät → Android-Berechtigungen** werden getrennt angezeigt:
+Benachrichtigungsfreigabe, DND-Richtlinienzugriff, Akkuausnahme und tatsächlich
+vorbereiteter Prioritätskanal. Der Nutzer kann die jeweiligen Android-Einstellungen
+direkt öffnen und den eigenen Kanal ausdrücklich vorbereiten. Kein automatischer
+Berechtigungsdialog und keine Umgehung der Android-Systemregeln. Selbst bei allen
+grünen Anzeigen bleibt FCM bestmöglich und kann durch Systemrichtlinien ausfallen.

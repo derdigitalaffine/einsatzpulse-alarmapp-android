@@ -14,6 +14,8 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
+import android.os.PowerManager
 
 object AlarmNotifications {
     fun notificationTag(incidentId:Int,unitId:Int):String =
@@ -39,6 +41,29 @@ object AlarmNotifications {
         player.setOnCompletionListener { it.release() }
         try { player.start() } catch (_:Exception) { player.release() }
     }
+
+    fun notificationsEnabled(context:Context):Boolean =
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    fun batteryNotRestricted(context:Context):Boolean =
+        (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .isIgnoringBatteryOptimizations(context.packageName)
+
+    fun priorityChannelPrepared(context:Context,config:AlarmDevice):Boolean {
+        if(!config.enabled || !config.bypassDnd || !dndGranted(context)) return false
+        val id="alert_v1_"+config.tone+"_priority_"+if(config.vibrate)"vib" else "silent"
+        val channel=(context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .getNotificationChannel(id)
+        return channel!=null && channel.importance>NotificationManager.IMPORTANCE_NONE &&
+            channel.canBypassDnd()
+    }
+
+    fun prepareChannel(context:Context,config:AlarmDevice):Boolean {
+        if(!config.enabled || !notificationsEnabled(context)) return false
+        channel(context,config)
+        return if(config.bypassDnd) priorityChannelPrepared(context,config) else true
+    }
+
     fun dndGranted(context:Context):Boolean =
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .isNotificationPolicyAccessGranted

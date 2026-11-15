@@ -143,6 +143,7 @@ private fun AlarmApp(context:Context) {
     var device by remember { mutableStateOf<AlarmDevice?>(null) }
     var error by remember { mutableStateOf("") }
     var selectedUnit by remember { mutableIntStateOf(0) }
+    var diagnosticRefresh by remember { mutableIntStateOf(0) }
     var lastSync by remember { mutableStateOf("") }
     val notifications=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         scope.launch { snackbar.showSnackbar(if(it)"Benachrichtigungen zugelassen" else "Alarmhinweise können blockiert sein") }
@@ -392,8 +393,26 @@ private fun AlarmApp(context:Context) {
                                 Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                                     Text("Android-Berechtigungen",fontWeight=FontWeight.Bold,
                                         style=MaterialTheme.typography.titleLarge)
-                                    Text("Ruhemodus: ${if(AlarmNotifications.dndGranted(context))"Freigegeben" else "Nicht freigegeben"}",
-                                        color=soft)
+                                    val notified=remember(diagnosticRefresh) {
+                                        AlarmNotifications.notificationsEnabled(context)
+                                    }
+                                    val dnd=remember(diagnosticRefresh) {
+                                        AlarmNotifications.dndGranted(context)
+                                    }
+                                    val battery=remember(diagnosticRefresh) {
+                                        AlarmNotifications.batteryNotRestricted(context)
+                                    }
+                                    val priority=remember(diagnosticRefresh,config) {
+                                        config!=null && AlarmNotifications.priorityChannelPrepared(context,config)
+                                    }
+                                    Text("Benachrichtigungen: "+if(notified)"Freigegeben" else "Blockiert",
+                                        color=if(notified)mint else crimson)
+                                    Text("Nicht-stören-Zugriff: "+if(dnd)"Vom System erteilt" else "Nicht erteilt",
+                                        color=if(dnd)mint else soft)
+                                    Text("Akku-Ausnahme: "+if(battery)"Vorhanden" else "Nicht eingerichtet",
+                                        color=if(battery)mint else soft)
+                                    Text("Prioritätskanal: "+if(priority)"Konfiguriert" else "Nicht vorbereitet",
+                                        color=if(priority)mint else soft)
                                     Text("Android kann Prioritätsalarme nur mit deiner Einwilligung zulassen. " +
                                         "Die Servereinstellung alleine schaltet Nicht stören nicht aus.",
                                         color=soft,style=MaterialTheme.typography.bodySmall)
@@ -408,6 +427,29 @@ private fun AlarmApp(context:Context) {
                                     if(Build.VERSION.SDK_INT>=33) OutlinedButton(onClick={
                                         notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
                                     }) {Text("Benachrichtigungen erlauben")}
+                                    OutlinedButton(onClick={
+                                        context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                            .putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    }) {Text("Android-Benachrichtigungskanäle öffnen")}
+                                    if(config!=null) OutlinedButton(onClick={
+                                        val success=runCatching {
+                                            AlarmNotifications.prepareChannel(context,config)
+                                        }.getOrDefault(false)
+                                        diagnosticRefresh++
+                                        scope.launch { snackbar.showSnackbar(
+                                            if(success)"Alarmkanal vorbereitet. Android-Übersteuerung bleibt systemabhängig."
+                                            else "Alarmkanal nicht bereit: Berechtigungen und Servereinstellungen prüfen."
+                                        ) }
+                                    }) {Text("Alarmkanal vorbereiten und prüfen")}
+                                    OutlinedButton(onClick={
+                                        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    }) {Text("Akku-Optimierung prüfen")}
+                                    TextButton(onClick={
+                                        diagnosticRefresh++
+                                        refresh()
+                                    }) {Text("Gerätestatus aktualisieren")}
                                 }
                             }
                             Card(colors=CardDefaults.cardColors(containerColor=panel),shape=r) {
