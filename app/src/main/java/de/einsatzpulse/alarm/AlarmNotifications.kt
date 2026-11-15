@@ -16,6 +16,18 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
 object AlarmNotifications {
+    fun notificationTag(incidentId:Int,unitId:Int):String =
+        "ep-alarm:"+incidentId+":"+unitId
+
+    fun shownRecently(context:Context,key:String,now:Long=System.currentTimeMillis()):Boolean {
+        val last=context.getSharedPreferences("ep_alarm_shown_v1",Context.MODE_PRIVATE)
+            .getLong(key,0L)
+        return last>0L && now>=last && now-last<24*60*60*1000L
+    }
+    fun markShown(context:Context,key:String,now:Long=System.currentTimeMillis()) {
+        context.getSharedPreferences("ep_alarm_shown_v1",Context.MODE_PRIVATE)
+            .edit().putLong(key,now).apply()
+    }
     fun soundResource(tone:String):Int = when(tone) {
         "siren" -> R.raw.siren
         "chime" -> R.raw.chime
@@ -51,6 +63,37 @@ object AlarmNotifications {
         }
         return key
     }
+    fun cancel(context:Context,incidentId:Int,unitId:Int) {
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .cancel(notificationTag(incidentId,unitId),0)
+    }
+
+    fun showTest(context:Context,config:AlarmDevice):Boolean {
+        if(!config.enabled) return false
+        if(Build.VERSION.SDK_INT>=33 &&
+            ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+            return false
+        val key=channel(context,config)
+        val notification=NotificationCompat.Builder(context,key)
+            .setSmallIcon(R.drawable.ic_alarm)
+            .setColor(0xFFE64E54.toInt())
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setContentTitle("TESTALARM – KEIN EINSATZ")
+            .setContentText("EinsatzPulse · Nur ein Funktionstest des Alarmtons")
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText("Dies ist ein TEST. Es wurde kein Einsatz ausgelöst."))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setContentIntent(PendingIntent.getActivity(context,19768,
+                Intent(context,MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            .build()
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify("ep-test-alarm",0,notification)
+        return true
+    }
+
     fun show(context:Context,incidentId:Int,unitId:Int,config:AlarmDevice,
              keyword:String="",town:String=""):Boolean {
         if(!config.enabled) return false
@@ -58,10 +101,12 @@ object AlarmNotifications {
             ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             return false
         val channelId=channel(context,config)
-        val open=PendingIntent.getActivity(context,incidentId,Intent(context,MainActivity::class.java)
+        val openIntent=Intent(context,MainActivity::class.java)
             .putExtra("incident_id",incidentId).putExtra("unit_id",unitId)
-            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            .setData(Uri.parse("einsatzpulse://alarm/"+incidentId+"/"+unitId+"/open"))
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val open=PendingIntent.getActivity(context,notificationTag(incidentId,unitId).hashCode(),
+            openIntent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val title=if(keyword.isBlank())"EinsatzPulse: Alarmhinweis" else keyword
         val body=if(town.isBlank())"Einsatzmeldung – App öffnen und prüfen" else town
         val builder=NotificationCompat.Builder(context,channelId)
@@ -77,12 +122,14 @@ object AlarmNotifications {
                 val intent=Intent(context,AlarmActionReceiver::class.java)
                     .putExtra("incident_id",incidentId).putExtra("unit_id",unitId)
                     .putExtra("status",action.first)
-                val pending=PendingIntent.getBroadcast(context,incidentId*10+index,intent,
+                    .setData(Uri.parse("einsatzpulse://alarm/"+incidentId+"/"+unitId+"/"+action.first))
+                val pending=PendingIntent.getBroadcast(context,
+                    (notificationTag(incidentId,unitId)+":"+index).hashCode(),intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 builder.addAction(0,action.second,pending)
             }
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(incidentId,builder.build())
+            .notify(notificationTag(incidentId,unitId),0,builder.build())
         return true
     }
 }

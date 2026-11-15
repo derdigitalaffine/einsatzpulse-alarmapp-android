@@ -39,3 +39,10 @@ Produktive APKs benötigen einen eigenen gesicherten Release-Keystore und reale 
 - HTTPS mit gültigem, vom Android-System vertrautem Zertifikat erforderlich.
 - Keine telefonische Alarmannahme, keine Leitstellen-/DME-Schnittstelle und **kein Ersatz offizieller BOS-Alarmierung**.
 - Erforderliche Freigabe: reales Android-13/14/15/16-Gerät, Sperrbildschirm/DND, FCM, Reconnect, Widerruf, Lasttests und Datenschutz.
+
+## Alarmzuverlässigkeit: zweite Entwicklungsrunde
+- Die FCM-Rückrufmethode verarbeitet keine blockierenden Serverabfragen mehr. Ein priorisierter `WorkManager`-Auftrag übernimmt die Authentifizierungs- und Einsatzprüfung.
+- Pushdaten haben ein serverseitiges Sendezeitfeld; nach 120 Sekunden werden sie verworfen. Offline-Rückmeldungen werden **nicht** als bestätigt gewertet.
+- Dieselbe Einsatz-/Einheitenkombination wird auf Android 24 Stunden nicht erneut akustisch alarmiert; andere Einheiten desselben Einsatzes besitzen getrennte Notification-IDs und PendingIntents.
+- Ein Web-initiierter **TESTALARM – KEIN EINSATZ** erzeugt keine Einsatzdaten und besitzt keine Teilnahmeaktionen. Nur mit vorbereitetem Firebase-Server nutzbar.
+- Android-Systemausnahmen für „Nicht stören“ sind weiterhin freiwillig und keine Garantie für die Übersteuerung des Gerätes.
