@@ -168,7 +168,7 @@ private fun AlarmApp(context:Context) {
                 lastSync=java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.GERMANY)
                     .format(java.util.Date())
                 error=""
-                registerFcm()
+                if(device?.pushRegistered != true) registerFcm()
             } catch (e:Exception) { error=e.message ?: "Server derzeit nicht erreichbar" }
         }
     }
