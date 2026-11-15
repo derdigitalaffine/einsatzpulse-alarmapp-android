@@ -11,6 +11,8 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+class AlarmHttpException(val statusCode:Int,message:String):IOException(message)
+
 class AlarmApi(context: Context) {
     private val session = SecureSession(context)
     private val http = OkHttpClient.Builder()
@@ -35,7 +37,7 @@ class AlarmApi(context: Context) {
             http.newCall(builder.build()).execute().use { response ->
                 val result=JSONObject(response.body?.string() ?: "{}")
                 if (!response.isSuccessful)
-                    throw IOException(result.optString("error","HTTP "+response.code))
+                    throw AlarmHttpException(response.code,result.optString("error","HTTP "+response.code))
                 result
             }
         }
@@ -48,6 +50,12 @@ class AlarmApi(context: Context) {
         session.save(origin,credential)
         return device
     }
+    suspend fun unlink():Boolean {
+        if(!session.linked) return false
+        return call(session.server,"/alarm/native/unlink/","POST")
+            .optBoolean("revoked",false)
+    }
+
     suspend fun device(): AlarmDevice =
         AlarmDevice.from(call(session.server,"/alarm/native/me/").getJSONObject("device"))
     suspend fun dashboard(): AlarmDashboard =

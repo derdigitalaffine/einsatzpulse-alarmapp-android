@@ -51,10 +51,10 @@ class MainActivity:ComponentActivity() {
         super.onCreate(savedInstanceState)
         val incident=intent.getIntExtra("incident_id",0)
         val unit=intent.getIntExtra("unit_id",0)
-        if(incident>0 && unit>0 && SecureSession(this).linked) {
-            lifecycleScope.launch {
-                runCatching { AlarmApi(applicationContext).receipt(incident,unit,"opened") }
-            }
+        val session=SecureSession(this)
+        if(incident>0 && unit>0 && session.linked &&
+            intent.getStringExtra("session_key")==session.fingerprint) {
+            AlarmReceiptWorker.schedule(applicationContext,incident,unit,"opened")
         }
         setContent {
             MaterialTheme(colorScheme=alarmColorScheme) {
@@ -458,11 +458,31 @@ private fun AlarmApp(context:Context) {
                                     Text(session.server,color=soft)
                                     Text("Geräteeinstellungen und Widerruf: EinsatzPulse → Meine Alarme → Android-Geräte",
                                         color=mint)
+                                    Button(onClick={
+                                        busy=true;error=""
+                                        scope.launch {
+                                            try {
+                                                if(!api.unlink()) error("Serverwiderruf nicht bestätigt")
+                                                else {
+                                                    AlarmNotifications.dismissAll(context)
+                                                    session.clear()
+                                                    linked=false;dashboard=null;device=null
+                                                    snackbar.showSnackbar("Gerätezugang serverseitig widerrufen")
+                                                }
+                                            } catch(e:Exception) {
+                                                error="Widerruf nicht bestätigt: ${e.message}. Alternativ im Web widerrufen."
+                                            } finally {busy=false}
+                                        }
+                                    },enabled=!busy) {Text("Gerät am Server widerrufen")}
+                                    Text("Lokales Abmelden widerruft den Serverzugang NICHT. "+
+                                        "Bei fehlender Verbindung anschließend im Web das Gerät löschen.",
+                                        color=soft,style=MaterialTheme.typography.bodySmall)
                                     OutlinedButton(onClick={
+                                        AlarmNotifications.dismissAll(context)
                                         session.clear()
                                         linked=false;dashboard=null;device=null;error=""
                                         snackbar.currentSnackbarData?.dismiss()
-                                    }) {Text("Gerätezugang lokal entfernen")}
+                                    },enabled=!busy) {Text("Nur lokal abmelden")}
                                 }
                             }
                             Text("FCM ist bestmöglich, nicht garantiert. Energiesparen, Android-Sperren, " +

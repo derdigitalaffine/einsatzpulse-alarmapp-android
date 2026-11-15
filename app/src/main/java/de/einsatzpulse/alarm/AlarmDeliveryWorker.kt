@@ -39,7 +39,9 @@ class AlarmDeliveryWorker(context:Context,params:WorkerParameters):CoroutineWork
         val issued=inputData.getLong("sent_at_ms",0L)
         // Never raise a stale siren after background scheduling or offline recovery.
         if(issued<=0L || issued>now+30_000L || now-issued>120_000L) return Result.success()
-        if(!SecureSession(applicationContext).linked) return Result.failure()
+        val session=SecureSession(applicationContext)
+        val identity=inputData.getString("session_key") ?: return Result.failure()
+        if(!session.linked || session.fingerprint!=identity) return Result.success()
 
         val type=inputData.getString("type") ?: return Result.failure()
         val api=AlarmApi(applicationContext)
@@ -51,7 +53,8 @@ class AlarmDeliveryWorker(context:Context,params:WorkerParameters):CoroutineWork
 
         if(type=="test") {
             if(inputData.getInt("device_id",0)!=device.id) return Result.success()
-            val key="test:"+device.id+":"+issued
+            if(SecureSession(applicationContext).fingerprint!=identity) return Result.success()
+            val key=AlarmIdentity.dedupKey(identity,"test:"+device.id+":"+issued)
             if(AlarmNotifications.shownRecently(applicationContext,key)) return Result.success()
             if(AlarmNotifications.showTest(applicationContext,device)) {
                 AlarmNotifications.markShown(applicationContext,key)
@@ -62,7 +65,8 @@ class AlarmDeliveryWorker(context:Context,params:WorkerParameters):CoroutineWork
         val incidentId=inputData.getInt("incident_id",0)
         val unitId=inputData.getInt("unit_id",0)
         if(incidentId<=0 || unitId<=0) return Result.failure()
-        val key=AlarmNotifications.notificationTag(incidentId,unitId)
+        val key=AlarmIdentity.dedupKey(identity,
+            AlarmNotifications.notificationTag(incidentId,unitId))
         if(AlarmNotifications.shownRecently(applicationContext,key)) return Result.success()
 
         // Verify *current* unit membership and incident state before revealing
@@ -71,14 +75,15 @@ class AlarmDeliveryWorker(context:Context,params:WorkerParameters):CoroutineWork
             api.dashboard()
         } catch(e:CancellationException) {throw e}
           catch(_:Exception) {return Result.retry()}
+        if(SecureSession(applicationContext).fingerprint!=identity) return Result.success()
         val incident=dashboard.incidents.firstOrNull {
             it.id==incidentId && it.unitId==unitId && it.status=="active"
         } ?: return Result.success()
-        try { api.receipt(incidentId,unitId,"received") } catch(_:Exception) {}
+        AlarmReceiptWorker.schedule(applicationContext,incidentId,unitId,"received")
         if(AlarmNotifications.show(applicationContext,incidentId,unitId,
                 device,incident.keyword,incident.town)) {
             AlarmNotifications.markShown(applicationContext,key)
-            try { api.receipt(incidentId,unitId,"shown") } catch(_:Exception) {}
+            AlarmReceiptWorker.schedule(applicationContext,incidentId,unitId,"shown")
         }
         return Result.success()
     }

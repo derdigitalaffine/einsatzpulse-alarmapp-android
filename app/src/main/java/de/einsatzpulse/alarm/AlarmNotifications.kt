@@ -88,6 +88,11 @@ object AlarmNotifications {
         }
         return key
     }
+    fun dismissAll(context:Context) {
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .cancelAll()
+    }
+
     fun cancel(context:Context,incidentId:Int,unitId:Int) {
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .cancel(notificationTag(incidentId,unitId),0)
@@ -128,6 +133,7 @@ object AlarmNotifications {
         val channelId=channel(context,config)
         val openIntent=Intent(context,MainActivity::class.java)
             .putExtra("incident_id",incidentId).putExtra("unit_id",unitId)
+            .putExtra("session_key",SecureSession(context).fingerprint)
             .setData(Uri.parse("einsatzpulse://alarm/"+incidentId+"/"+unitId+"/open"))
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val open=PendingIntent.getActivity(context,notificationTag(incidentId,unitId).hashCode(),
@@ -147,6 +153,7 @@ object AlarmNotifications {
                 val intent=Intent(context,AlarmActionReceiver::class.java)
                     .putExtra("incident_id",incidentId).putExtra("unit_id",unitId)
                     .putExtra("status",action.first)
+                    .putExtra("session_key",SecureSession(context).fingerprint)
                     .setData(Uri.parse("einsatzpulse://alarm/"+incidentId+"/"+unitId+"/"+action.first))
                 val pending=PendingIntent.getBroadcast(context,
                     (notificationTag(incidentId,unitId)+":"+index).hashCode(),intent,
