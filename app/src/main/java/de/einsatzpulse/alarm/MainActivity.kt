@@ -51,10 +51,10 @@ class MainActivity:ComponentActivity() {
         super.onCreate(savedInstanceState)
         val incident=intent.getIntExtra("incident_id",0)
         val unit=intent.getIntExtra("unit_id",0)
-        if(incident>0 && unit>0 && SecureSession(this).linked) {
-            lifecycleScope.launch {
-                runCatching { AlarmApi(applicationContext).receipt(incident,unit,"opened") }
-            }
+        val session=SecureSession(this)
+        if(incident>0 && unit>0 && session.linked &&
+            intent.getStringExtra("session_key")==session.fingerprint) {
+            AlarmReceiptWorker.schedule(applicationContext,incident,unit,"opened")
         }
         setContent {
             MaterialTheme(colorScheme=alarmColorScheme) {
@@ -149,16 +149,8 @@ private fun AlarmApp(context:Context) {
         scope.launch { snackbar.showSnackbar(if(it)"Benachrichtigungen zugelassen" else "Alarmhinweise können blockiert sein") }
     }
     fun registerFcm() {
-        if(!linked||FirebaseApp.getApps(context).isEmpty()) return
-        runCatching {
-            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                scope.launch {
-                    runCatching { api.registerPushToken(token) }
-                        .onFailure { error="FCM-Registrierung: ${it.message}" }
-                    runCatching { device=api.device() }
-                }
-            }.addOnFailureListener { error="FCM-Konfiguration prüfen: ${it.message}" }
-        }
+        if(!linked) return
+        PushRegistrationWorker.enqueue(context)
     }
     fun refresh() {
         if(!linked)return
@@ -175,6 +167,9 @@ private fun AlarmApp(context:Context) {
     }
     LaunchedEffect(linked) {
         if(linked) {
+            // Sync on each newly linked session or app launch, even when the
+            // backend stores an old FCM token from before a token rotation.
+            registerFcm()
             while(true) {
                 refresh()
                 delay(30000)
@@ -378,9 +373,19 @@ private fun AlarmApp(context:Context) {
                                         }
                                         Text("Ton: ${config.tone} · Vibration: ${if(config.vibrate)"Ja" else "Nein"}",
                                             color=soft)
-                                        Text(if(config.pushRegistered)"FCM registriert"
-                                            else "FCM noch nicht registriert – Firebase-Konfiguration prüfen",
+                                        Text(if(config.pushRegistered)"FCM-Token auf Server hinterlegt (kein Zustellnachweis)"
+                                            else "FCM-Token fehlt – Firebase-Konfiguration und Verbindung prüfen",
                                             color=if(config.pushRegistered)mint else crimson)
+                                        val synced=PushRegistrationWorker.lastSyncedAt(context)
+                                        Text(if(synced>0L)
+                                            "Letzte Client-Registrierung: "+
+                                              java.text.SimpleDateFormat("dd.MM. HH:mm",
+                                                  java.util.Locale.GERMANY).format(java.util.Date(synced))
+                                            else "Client-Registrierung noch nicht bestätigt",
+                                            color=soft,style=MaterialTheme.typography.bodySmall)
+                                        OutlinedButton(onClick={registerFcm()}) {
+                                            Text("FCM-Registrierung erneut anstoßen")
+                                        }
                                         OutlinedButton(onClick={AlarmNotifications.preview(context,config.tone)}) {
                                             Icon(Icons.Default.VolumeUp,null)
                                             Spacer(Modifier.width(6.dp))
@@ -458,11 +463,31 @@ private fun AlarmApp(context:Context) {
                                     Text(session.server,color=soft)
                                     Text("Geräteeinstellungen und Widerruf: EinsatzPulse → Meine Alarme → Android-Geräte",
                                         color=mint)
+                                    Button(onClick={
+                                        busy=true;error=""
+                                        scope.launch {
+                                            try {
+                                                if(!api.unlink()) error("Serverwiderruf nicht bestätigt")
+                                                else {
+                                                    AlarmNotifications.dismissAll(context)
+                                                    session.clear()
+                                                    linked=false;dashboard=null;device=null
+                                                    snackbar.showSnackbar("Gerätezugang serverseitig widerrufen")
+                                                }
+                                            } catch(e:Exception) {
+                                                error="Widerruf nicht bestätigt: ${e.message}. Alternativ im Web widerrufen."
+                                            } finally {busy=false}
+                                        }
+                                    },enabled=!busy) {Text("Gerät am Server widerrufen")}
+                                    Text("Lokales Abmelden widerruft den Serverzugang NICHT. "+
+                                        "Bei fehlender Verbindung anschließend im Web das Gerät löschen.",
+                                        color=soft,style=MaterialTheme.typography.bodySmall)
                                     OutlinedButton(onClick={
+                                        AlarmNotifications.dismissAll(context)
                                         session.clear()
                                         linked=false;dashboard=null;device=null;error=""
                                         snackbar.currentSnackbarData?.dismiss()
-                                    }) {Text("Gerätezugang lokal entfernen")}
+                                    },enabled=!busy) {Text("Nur lokal abmelden")}
                                 }
                             }
                             Text("FCM ist bestmöglich, nicht garantiert. Energiesparen, Android-Sperren, " +

@@ -35,6 +35,7 @@ class SecureSession(context: Context) {
         } catch (_: Exception) { "" }
     }
     val linked: Boolean get() = server.startsWith("https://") && token.startsWith("epna_")
+    val fingerprint: String get() = AlarmIdentity.fingerprint(server,token)
     fun save(server: String, credential: String) {
         require(credential.startsWith("epna_"))
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")

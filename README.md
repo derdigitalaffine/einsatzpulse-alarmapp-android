@@ -62,3 +62,25 @@ Exklusive High-Priority-FCM-Verarbeitung über WorkManager stellt den für älte
 Android-Versionen erforderlichen zeitweiligen Vordergrundhinweis bereit. Ohne
 ForegroundInfo kann ein beschleunigter Job auf Android 11 und älter abstürzen;
 die Prüfung läuft deshalb mit einem generischen, nicht-sensiblen Low-Priority-Kanal.
+
+## v0.3: kontogebundene Alarmprüfung und quittierbare Entkopplung
+- Pending-Alarmjobs, lokale Deduplizierung und Benachrichtigungsaktionen sind
+  an einen SHA-256-Fingerabdruck der aktuell gekoppelten Server-/Geräteanmeldung
+  gebunden. Ehemalige Konten dürfen nach Abmelden/Umkoppeln keine Rückmeldung
+  im neuen Konto auslösen; es werden keine Bearer Tokens in Worker-Daten abgelegt.
+- `received`, `shown` und `opened` werden mit dauerhaften, getrennten
+  WorkManager-Jobs (Retry bei Netzfehlern) an das Backend gemeldet. Eine lokale
+  Anzeige bleibt jedoch **kein unabhängiger Beweis** für BOS-Zustellung.
+- `Gerät am Server widerrufen` ruft den authentifizierten Widerruf auf und
+  entfernt Zugangsdaten erst nach erfolgreicher Bestätigung. `Nur lokal
+  abmelden` entfernt Daten/Benachrichtigungen ohne serverseitigen Widerruf.
+
+## Verlustrisiko bei FCM-Tokenrotation reduziert
+`FirebaseMessagingService.onNewToken` beendet sich schnell und plant nur
+einen dauerhaften Registrierungsauftrag ein. `PushRegistrationWorker`
+fordert das aktuelle Token beim Firebase-SDK erneut ab, prüft die
+Geräteanmeldung und überträgt es mit bestmöglichen, begrenzten Offline-Retries
+an den Server. Das FCM-Token selbst steht nicht im WorkManager-Speicher.
+Beim App-Start wird eine erneute Registrierung versucht, auch wenn der
+Server noch ein altes Token gespeichert hat. Ein fehlendes oder widerrufenes
+Serverrecht wird nicht durch unbeschränkte Wiederholungen umgangen.
