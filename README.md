@@ -1,6 +1,6 @@
 # EinsatzPulse Alarm · Android
 
-**Aktueller Stand: v0.2.0-beta.1** – priorisierte WorkManager-Verarbeitung, pro Einheit getrennte Benachrichtigungen, klare Testalarme und Android-Gerätebereitschaft.
+**Aktueller Stand: v0.3.0-beta.1** – Multi-Einheiten-Zustellung, kontogebundene FCM-Jobs, persistente Quittierungen und sicherer Gerätewiderruf.
 
 Native **Android-Alarm-App für EinsatzPulse** auf Kotlin/Jetpack Compose + Material 3.
 Eigenes Projekt/Repository nach dem Gradle-/APK-CI-Muster von Tromuwelle Android.
