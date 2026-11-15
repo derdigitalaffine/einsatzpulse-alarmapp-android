@@ -1,6 +1,10 @@
 package de.einsatzpulse.alarm
 
 import android.content.Context
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import androidx.core.app.NotificationCompat
+import androidx.work.ForegroundInfo
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
@@ -10,6 +14,26 @@ import kotlinx.coroutines.CancellationException
  * an expedited WorkManager job so process death doesn't silently drop alarms.
  */
 class AlarmDeliveryWorker(context:Context,params:WorkerParameters):CoroutineWorker(context,params) {
+    /** Required for expedited WorkManager tasks on Android 8–11. */
+    override suspend fun getForegroundInfo():ForegroundInfo {
+        val manager=applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val id="ep_alarm_processing_v1"
+        if(manager.getNotificationChannel(id)==null) {
+            manager.createNotificationChannel(NotificationChannel(id,
+                "EinsatzPulse · Alarmprüfung",NotificationManager.IMPORTANCE_LOW).apply {
+                description="Kurzzeitige Hintergrundprüfung eines zusätzlichen Alarmhinweises"
+                setSound(null,null)
+            })
+        }
+        val notification=NotificationCompat.Builder(applicationContext,id)
+            .setSmallIcon(R.drawable.ic_alarm)
+            .setContentTitle("EinsatzPulse prüft einen Alarmhinweis")
+            .setContentText("Berechtigung und Einsatzzuordnung werden überprüft")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true).build()
+        return ForegroundInfo(47007,notification)
+    }
+
     override suspend fun doWork():Result {
         val now=System.currentTimeMillis()
         val issued=inputData.getLong("sent_at_ms",0L)
