@@ -1,51 +1,56 @@
 package de.einsatzpulse.alarm
 
 import android.content.Intent
+import android.content.Context
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import androidx.work.BackoffPolicy
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeUnit
 
-/**
- * FCM payload contains IDs only. Enriched details must be retrieved using
- * current device auth. Provider acceptance is not a receipt.
- */
-class AlarmFirebaseService: FirebaseMessagingService() {
+class AlarmFirebaseService:FirebaseMessagingService() {
     override fun onNewToken(token:String) {
+        // MainActivity also refreshes registration after pairing / relaunch.
         if(!SecureSession(this).linked) return
         CoroutineScope(SupervisorJob()+Dispatchers.IO).launch {
             runCatching { AlarmApi(applicationContext).registerPushToken(token) }
         }
     }
+
     override fun onMessageReceived(message:RemoteMessage) {
-        if(message.data["type"]!="alarm" || !SecureSession(this).linked) return
-        val incidentId=message.data["incident_id"]?.toIntOrNull()?.takeIf { it>0 } ?: return
-        val unitId=message.data["unit_id"]?.toIntOrNull()?.takeIf { it>0 } ?: return
-        runBlocking {
-            withTimeoutOrNull(11000) {
-                val api=AlarmApi(applicationContext)
-                // Don't display sensitive information if server verification is unavailable.
-                val config=runCatching { api.device() }.getOrNull() ?: return@withTimeoutOrNull
-                if(!config.enabled) return@withTimeoutOrNull
-                val dashboard=runCatching { api.dashboard() }.getOrNull()
-                // If online, actively reject a stale or unauthorized push.
-                val matching=dashboard?.incidents?.firstOrNull { it.id==incidentId && it.unitId==unitId && it.status=="active" }
-                if(dashboard!=null && matching==null) return@withTimeoutOrNull
-                runCatching { api.receipt(incidentId,unitId,"received") }
-                val shown=AlarmNotifications.show(applicationContext,incidentId,unitId,config,
-                    matching?.keyword?:"",matching?.town?:"")
-                if(shown) runCatching { api.receipt(incidentId,unitId,"shown") }
-            }
-        }
+        if(!SecureSession(this).linked) return
+        val data=AlarmEnvelope.parse(message.data) ?: return
+        val builder=Data.Builder()
+            .putString("type",data.type)
+            .putLong("sent_at_ms",data.sentAtMs)
+            .putInt("incident_id",data.incidentId)
+            .putInt("unit_id",data.unitId)
+            .putInt("device_id",data.deviceId)
+        val work=OneTimeWorkRequestBuilder<AlarmDeliveryWorker>()
+            .setInputData(builder.build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL,20,TimeUnit.SECONDS)
+            .apply {
+                if(message.originalPriority==RemoteMessage.PRIORITY_HIGH)
+                    setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            }.build()
+        val identity=if(data.type=="test")
+            "ep-test-"+data.deviceId+"-"+data.sentAtMs
+            else "ep-alarm-"+data.incidentId+"-"+data.unitId
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            identity,ExistingWorkPolicy.KEEP,work)
     }
 }
 
 class AlarmActionReceiver:android.content.BroadcastReceiver() {
-    override fun onReceive(context:android.content.Context,intent:Intent) {
+    override fun onReceive(context:Context,intent:Intent) {
         val incident=intent.getIntExtra("incident_id",0)
         val unit=intent.getIntExtra("unit_id",0)
         val status=intent.getStringExtra("status")?:""
@@ -53,13 +58,15 @@ class AlarmActionReceiver:android.content.BroadcastReceiver() {
         val pending=goAsync()
         CoroutineScope(SupervisorJob()+Dispatchers.IO).launch {
             try {
-                val confirmed=AlarmApi(context.applicationContext).reply(incident,unit,status)
+                val confirmed=kotlinx.coroutines.withTimeoutOrNull(8000) {
+                    AlarmApi(context.applicationContext).reply(incident,unit,status)
+                } ?: false
                 if(confirmed) {
-                    (context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager)
-                        .cancel(incident)
+                    AlarmNotifications.cancel(context,incident,unit)
                 }
             } catch (_:Exception) {
-                // Keep notification for manual retry; never claim an unconfirmed reply.
+                // Keep the original notification. The app never claims a reply
+                // was confirmed until Django responds successfully.
             } finally { pending.finish() }
         }
     }
