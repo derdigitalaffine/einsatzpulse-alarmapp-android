@@ -74,3 +74,13 @@ die Prüfung läuft deshalb mit einem generischen, nicht-sensiblen Low-Priority-
 - `Gerät am Server widerrufen` ruft den authentifizierten Widerruf auf und
   entfernt Zugangsdaten erst nach erfolgreicher Bestätigung. `Nur lokal
   abmelden` entfernt Daten/Benachrichtigungen ohne serverseitigen Widerruf.
+
+## Verlustrisiko bei FCM-Tokenrotation reduziert
+`FirebaseMessagingService.onNewToken` beendet sich schnell und plant nur
+einen dauerhaften Registrierungsauftrag ein. `PushRegistrationWorker`
+fordert das aktuelle Token beim Firebase-SDK erneut ab, prüft die
+Geräteanmeldung und überträgt es mit bestmöglichen, begrenzten Offline-Retries
+an den Server. Das FCM-Token selbst steht nicht im WorkManager-Speicher.
+Beim App-Start wird eine erneute Registrierung versucht, auch wenn der
+Server noch ein altes Token gespeichert hat. Ein fehlendes oder widerrufenes
+Serverrecht wird nicht durch unbeschränkte Wiederholungen umgangen.

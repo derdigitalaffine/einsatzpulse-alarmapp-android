@@ -20,11 +20,9 @@ import java.util.concurrent.TimeUnit
 
 class AlarmFirebaseService:FirebaseMessagingService() {
     override fun onNewToken(token:String) {
-        // MainActivity also refreshes registration after pairing / relaunch.
-        if(!SecureSession(this).linked) return
-        CoroutineScope(SupervisorJob()+Dispatchers.IO).launch {
-            runCatching { AlarmApi(applicationContext).registerPushToken(token) }
-        }
+        // Persist retry intent, not a network request tied to the short
+        // FirebaseMessagingService callback lifetime.
+        if(token.isNotBlank()) PushRegistrationWorker.enqueue(applicationContext)
     }
 
     override fun onMessageReceived(message:RemoteMessage) {

@@ -149,16 +149,8 @@ private fun AlarmApp(context:Context) {
         scope.launch { snackbar.showSnackbar(if(it)"Benachrichtigungen zugelassen" else "Alarmhinweise können blockiert sein") }
     }
     fun registerFcm() {
-        if(!linked||FirebaseApp.getApps(context).isEmpty()) return
-        runCatching {
-            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                scope.launch {
-                    runCatching { api.registerPushToken(token) }
-                        .onFailure { error="FCM-Registrierung: ${it.message}" }
-                    runCatching { device=api.device() }
-                }
-            }.addOnFailureListener { error="FCM-Konfiguration prüfen: ${it.message}" }
-        }
+        if(!linked) return
+        PushRegistrationWorker.enqueue(context)
     }
     fun refresh() {
         if(!linked)return
@@ -175,6 +167,9 @@ private fun AlarmApp(context:Context) {
     }
     LaunchedEffect(linked) {
         if(linked) {
+            // Sync on each newly linked session or app launch, even when the
+            // backend stores an old FCM token from before a token rotation.
+            registerFcm()
             while(true) {
                 refresh()
                 delay(30000)
@@ -378,9 +373,19 @@ private fun AlarmApp(context:Context) {
                                         }
                                         Text("Ton: ${config.tone} · Vibration: ${if(config.vibrate)"Ja" else "Nein"}",
                                             color=soft)
-                                        Text(if(config.pushRegistered)"FCM registriert"
-                                            else "FCM noch nicht registriert – Firebase-Konfiguration prüfen",
+                                        Text(if(config.pushRegistered)"FCM-Token auf Server hinterlegt (kein Zustellnachweis)"
+                                            else "FCM-Token fehlt – Firebase-Konfiguration und Verbindung prüfen",
                                             color=if(config.pushRegistered)mint else crimson)
+                                        val synced=PushRegistrationWorker.lastSyncedAt(context)
+                                        Text(if(synced>0L)
+                                            "Letzte Client-Registrierung: "+
+                                              java.text.SimpleDateFormat("dd.MM. HH:mm",
+                                                  java.util.Locale.GERMANY).format(java.util.Date(synced))
+                                            else "Client-Registrierung noch nicht bestätigt",
+                                            color=soft,style=MaterialTheme.typography.bodySmall)
+                                        OutlinedButton(onClick={registerFcm()}) {
+                                            Text("FCM-Registrierung erneut anstoßen")
+                                        }
                                         OutlinedButton(onClick={AlarmNotifications.preview(context,config.tone)}) {
                                             Icon(Icons.Default.VolumeUp,null)
                                             Spacer(Modifier.width(6.dp))
