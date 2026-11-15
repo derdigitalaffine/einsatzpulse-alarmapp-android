@@ -1,1 +1,41 @@
-# einsatzpulse-alarmapp-android
+# EinsatzPulse Alarm · Android
+
+Native **Android-Alarm-App für EinsatzPulse** auf Kotlin/Jetpack Compose + Material 3.
+Eigenes Projekt/Repository nach dem Gradle-/APK-CI-Muster von Tromuwelle Android.
+**Keine WebView**, keine eingebetteten Passwörter und keine universelle Ausnahme von Android-Ruhemodi.
+
+## Funktionen
+- HTTPS-Server verbinden und mit einem zehn Minuten gültigen Einmalcode aus **Meine Alarme → Android-Geräte** koppeln.
+- Individueller widerrufbarer Gerätezugang verschlüsselt per Android Keystore (AES-GCM), nur Hash serverseitig.
+- Persönliche einsatz-/einheitsbasierte Live-Liste, Rückmeldung Ich komme/Später/Nein und Verfügbarkeitsstatus.
+- Native FCM-Datenpushes mit *ausschließlich* Einsatz-/Einheiten-IDs. Einsatzdetails nur nach serverseitig autorisiertem GET.
+- Separate Empfangs-, Anzeige- und Öffnungsbestätigungen; Rückmeldung nur nach HTTP-Serverbestätigung.
+- Vier **eigenständig erzeugte** Signalfolgen (Signal, Sirene, Klangfolge, Dringend) mit Tonvorschau.
+- Individuelle Android-Notification-Channels mit USAGE_ALARM, Vibration und optionalem DND-Prioritätskanal.
+- Gerätekonfiguration über EinsatzPulse-Weboberfläche (ein/aus, Ton, Vibration, DND-Priorität, Widerruf).
+- Standardmodus: keine dauerhaften Hintergrunddienste. FCM-Nachrichten werden vom Android-System empfangen, wenn verfügbar.
+
+## Firebase für echte Pushzustellung
+1. Firebase-Projekt erstellen und Android-App mit Paketname `de.einsatzpulse.alarm` registrieren.
+2. JSON der Android-App als Datei `app/google-services.json` bereitstellen (lokal) oder als Secret
+   `FIREBASE_GOOGLE_SERVICES_JSON_B64` (base64-kodierter Dateiinhalt) in GitHub Actions eintragen.
+3. Serverseitig FCM-HTTP-v1-Dienstkonto in `ALARM_FIREBASE_SERVICE_ACCOUNT_JSON` einrichten, siehe Hauptrepo
+   [docs/android-alarmierung.md](https://github.com/derdigitalaffine/einsatzpulse/blob/main/docs/android-alarmierung.md).
+4. Keine Firebase-Schlüssel fest im Quelltext. **Ohne die Client-Konfiguration entsteht zwar eine APK, aber keine FCM-Verbindung.**
+
+## APK bauen
+```sh
+gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+Android SDK 35, JDK 17, Gradle 8.11.1. Auf Branch/PR lädt GitHub Actions das
+**Debug-APK** unter »Actions → Native Alarm APK → Artifacts« hoch.
+Ein `release/vX.Y.Z`-Branch erzeugt zusätzlich ein GitHub-Prerelease mit Debugsignatur.
+Produktive APKs benötigen einen eigenen gesicherten Release-Keystore und reale Geräte-Abnahme.
+
+## Kritische Grenzen
+- DND-Vorrang nur mit explizitem **Benutzerzugriff auf die Android-Benachrichtigungsrichtlinie**
+  und aktivierter Servereinstellung; Betriebssystem und geänderte Channels behalten die Hoheit.
+- Ohne Google-Play-Dienste oder bei Energiespar-/Netzproblemen wird kein zuverlässiges Echtzeit-Push garantiert.
+- HTTPS mit gültigem, vom Android-System vertrautem Zertifikat erforderlich.
+- Keine telefonische Alarmannahme, keine Leitstellen-/DME-Schnittstelle und **kein Ersatz offizieller BOS-Alarmierung**.
+- Erforderliche Freigabe: reales Android-13/14/15/16-Gerät, Sperrbildschirm/DND, FCM, Reconnect, Widerruf, Lasttests und Datenschutz.
