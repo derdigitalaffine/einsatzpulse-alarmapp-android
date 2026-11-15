@@ -42,7 +42,7 @@ private val panel=Color(0xFF17263D)
 private val crimson=Color(0xFFFF5B65)
 private val mint=Color(0xFF68DBC0)
 private val soft=Color(0xFFABB9D0)
-private val theme=darkColorScheme(primary=crimson,secondary=mint,
+private val alarmColorScheme=darkColorScheme(primary=crimson,secondary=mint,
     background=navy,surface=panel,onSurface=Color.White,onBackground=Color.White)
 private val r=RoundedCornerShape(20.dp)
 
@@ -57,7 +57,7 @@ class MainActivity:ComponentActivity() {
             }
         }
         setContent {
-            MaterialTheme(colorScheme=theme) {
+            MaterialTheme(colorScheme=alarmColorScheme) {
                 AlarmApp(applicationContext)
             }
         }
@@ -111,12 +111,12 @@ private fun AlarmCard(item:AlarmIncident,busy:Boolean,onReply:(String)->Unit) {
             }}",color=mint,style=MaterialTheme.typography.bodySmall)
             if(item.status=="active") {
                 Row(horizontalArrangement=Arrangement.spacedBy(7.dp),modifier=Modifier.fillMaxWidth()) {
-                    Button(onClick={onReply.curry("yes")},enabled=!busy,modifier=Modifier.weight(1f),
+                    Button(onClick={onReply("yes")},enabled=!busy,modifier=Modifier.weight(1f),
                         contentPadding=PaddingValues(horizontal=6.dp)) { Text("Ich komme",maxLines=1) }
-                    OutlinedButton(onClick={onReply.curry("delayed")},enabled=!busy,
+                    OutlinedButton(onClick={onReply("delayed")},enabled=!busy,
                         modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=4.dp)) {
                         Text("Später",maxLines=1) }
-                    OutlinedButton(onClick={onReply.curry("no")},enabled=!busy,
+                    OutlinedButton(onClick={onReply("no")},enabled=!busy,
                         modifier=Modifier.weight(1.2f),contentPadding=PaddingValues(horizontal=3.dp)) {
                         Text("Nein",maxLines=1) }
                 }
@@ -124,7 +124,6 @@ private fun AlarmCard(item:AlarmIncident,busy:Boolean,onReply:(String)->Unit) {
         }
     }
 }
-private fun ((String)->Unit).curry(value:String):()->Unit = { this(value) }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -193,7 +192,7 @@ private fun AlarmApp(context:Context) {
                 }},
                 colors=TopAppBarDefaults.topAppBarColors(containerColor=navy),
                 actions={
-                    if(linked) IconButton(onClick={refresh}) {
+                    if(linked) IconButton(onClick={refresh()}) {
                         Icon(Icons.Default.Refresh,"Aktualisieren",tint=mint)
                     }
                 })
@@ -308,7 +307,7 @@ private fun AlarmApp(context:Context) {
                                     scope.launch {
                                         try {
                                             if(!api.reply(item.id,item.unitId,status))
-                                                error("Server hat Rückmeldung nicht bestätigt")
+                                                throw IllegalStateException("Server hat Rückmeldung nicht bestätigt")
                                             snackbar.showSnackbar("Rückmeldung vom Server bestätigt")
                                             dashboard=api.dashboard()
                                         } catch(e:Exception) {
