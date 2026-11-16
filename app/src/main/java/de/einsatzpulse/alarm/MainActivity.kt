@@ -34,6 +34,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -138,6 +141,7 @@ private fun AlarmApp(context:Context) {
     val snackbar=remember { SnackbarHostState() }
     val scope=rememberCoroutineScope()
     val scanContext=LocalContext.current
+    val lifecycleOwner=LocalLifecycleOwner.current
     val qrOptions=remember { GmsBarcodeScannerOptions.Builder()
         .setBarcodeFormats(Barcode.FORMAT_QR_CODE).enableAutoZoom().build() }
     var linked by remember { mutableStateOf(session.linked) }
@@ -179,14 +183,14 @@ private fun AlarmApp(context:Context) {
             } catch (e:Exception) { error=e.message ?: "Server derzeit nicht erreichbar" }
         }
     }
-    LaunchedEffect(linked) {
+    LaunchedEffect(linked,lifecycleOwner) {
         if(linked) {
             registerFcm()
-            var iteration=0
-            while(true) {
-                // This loop only runs while the app's UI is composed.
-                // No foreground service or misleading background push promise.
-                try {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                var iteration=0
+                while(true) {
+                    // This loop stops on Activity.onStop; not background push.
+                    try {
                     val current=api.runtime()
                     runtime=current
                     if(iteration%4==0 || device==null || device?.kind!=current.kind) {
@@ -202,12 +206,15 @@ private fun AlarmApp(context:Context) {
                 } catch(e:Exception) {
                     error=e.message ?: "Server derzeit nicht erreichbar"
                 }
-                iteration++
-                delay(8000)
+                    iteration++
+                    delay(8000)
+                }
             }
         }
     }
-    val kiosk=runtime?.kind in setOf("hall","vehicle")
+    // The administrator may temporarily preview ANY scene, irrespective of
+    // the assigned operational role. The server never grants extra rights.
+    val kiosk=runtime?.kind in setOf("hall","vehicle") || runtime?.testView==true
     DisposableEffect(kiosk) {
         val activity=context as? ComponentActivity
         if(kiosk) activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
