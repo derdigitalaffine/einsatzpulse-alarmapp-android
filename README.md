@@ -99,3 +99,20 @@ für Geräte ohne Google Play Dienste verfügbar.
 QR-Codes sind zehn Minuten gültige, einmalig verwendbare Zugangs-Credentials.
 Nicht fotografieren, weitergeben oder öffentlich anzeigen; kein automatischer
 Kontozugriff nach dem Scannen. Der Server benötigt eine gültige HTTPS-Origin.
+
+## v0.5: Serververwaltete Android-Betriebsarten (Migration 0038)
+
+Geräte können in der EinsatzPulse-Administration als **Hallenmonitor**,
+**Fahrzeugmonitor** oder **Einsatzkraft-App** eingerichtet werden.
+Die Einheiten-/Fahrzeugzuordnung ist eine serverseitige Berechtigungsgrenze.
+Die App fragt die authoritative `/api/alarm/native/runtime/`-API im
+geöffneten Vordergrund alle acht Sekunden ab und aktualisiert auch
+Fern-Testansichten und klar markierte TEST-Hinweise ohne Firebase.
+Fiktive Tests haben keine Rückmeldung und werden bei echten Einsätzen
+ausgeblendet. Android hält den Bildschirm für Hallen-/Fahrzeugmonitore an,
+solange die App sichtbar und der Modus aktiv ist.
+
+**Kein Konfigurationsversprechen für Hintergrund-Push:** Für nicht geöffnete
+Smartphones bleiben Firebase FCM und ein reales Projekt nötig. WorkManager
+kann kein verlässliches Live-Polling im Hintergrund anbieten; Android begrenzt
+dessen Intervalle und Foreground-Service-Dauer. Dies ersetzt keine BOS-Wege.

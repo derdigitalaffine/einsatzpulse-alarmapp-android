@@ -14,14 +14,21 @@ data class AlarmIncident(
 }
 data class AlarmDevice(
     val id: Int,val label: String,val enabled: Boolean,val tone: String,
-    val bypassDnd: Boolean,val vibrate: Boolean,val pushRegistered: Boolean
+    val bypassDnd: Boolean,val vibrate: Boolean,val pushRegistered: Boolean,
+    val kind:String="person",val assignedUnitIds:List<Int> = emptyList(),
+    val vehicleId:Int?=null
 ) {
     companion object {
         fun from(value: JSONObject): AlarmDevice {
             return AlarmDevice(value.optInt("id"),value.optString("label","Android"),
                 value.optBoolean("enabled",true),value.optString("tone","signal"),
                 value.optBoolean("bypass_dnd"),value.optBoolean("vibrate",true),
-                value.optBoolean("push_registered"))
+                value.optBoolean("push_registered"),
+                value.optString("kind","person"),
+                value.optJSONArray("unit_ids")?.let { ids ->
+                    (0 until ids.length()).map { ids.optInt(it) }.filter { it>0 }
+                } ?: emptyList(),
+                value.optInt("vehicle_id").takeIf { it>0 })
         }
     }
 }
