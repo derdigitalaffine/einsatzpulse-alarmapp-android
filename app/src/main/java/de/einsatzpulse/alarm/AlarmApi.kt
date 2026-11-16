@@ -58,6 +58,9 @@ class AlarmApi(context: Context) {
 
     suspend fun device(): AlarmDevice =
         AlarmDevice.from(call(session.server,"/alarm/native/me/").getJSONObject("device"))
+    suspend fun runtime():AlarmRuntime =
+        AlarmRuntime.from(call(session.server,"/alarm/native/runtime/"))
+
     suspend fun dashboard(): AlarmDashboard =
         AlarmDashboard.from(call(session.server,"/alarm/me/"))
     suspend fun reply(incidentId:Int,unitId:Int,status:String,eta:Int?=null): Boolean {

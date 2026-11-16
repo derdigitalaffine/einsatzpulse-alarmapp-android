@@ -15,8 +15,8 @@ android {
   applicationId = "de.einsatzpulse.alarm"
   minSdk = 26
   targetSdk = 35
-  versionCode = 4
-  versionName = "0.4.0-beta.1"
+  versionCode = 5
+  versionName = "0.5.0-beta.1"
  }
  buildTypes {
   release { isMinifyEnabled = false }

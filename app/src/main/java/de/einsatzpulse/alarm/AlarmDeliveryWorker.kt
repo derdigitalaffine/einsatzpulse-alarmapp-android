@@ -71,17 +71,18 @@ class AlarmDeliveryWorker(context:Context,params:WorkerParameters):CoroutineWork
 
         // Verify *current* unit membership and incident state before revealing
         // keywords, location, sounds or attendance actions on the device.
-        val dashboard=try {
-            api.dashboard()
+        val runtime=try {
+            api.runtime()
         } catch(e:CancellationException) {throw e}
           catch(_:Exception) {return Result.retry()}
         if(SecureSession(applicationContext).fingerprint!=identity) return Result.success()
-        val incident=dashboard.incidents.firstOrNull {
-            it.id==incidentId && it.unitId==unitId && it.status=="active"
+        val incident=runtime.incidents.firstOrNull {
+            it.id==incidentId && it.unitId==unitId && it.status=="active" && !it.demo
         } ?: return Result.success()
         AlarmReceiptWorker.schedule(applicationContext,incidentId,unitId,"received")
         if(AlarmNotifications.show(applicationContext,incidentId,unitId,
-                device,incident.keyword,incident.town)) {
+                device,incident.keyword,incident.town,
+                allowReply=runtime.kind=="person")) {
             AlarmNotifications.markShown(applicationContext,key)
             AlarmReceiptWorker.schedule(applicationContext,incidentId,unitId,"shown")
         }

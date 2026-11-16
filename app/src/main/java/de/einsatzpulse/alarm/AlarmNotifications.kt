@@ -125,7 +125,7 @@ object AlarmNotifications {
     }
 
     fun show(context:Context,incidentId:Int,unitId:Int,config:AlarmDevice,
-             keyword:String="",town:String=""):Boolean {
+             keyword:String="",town:String="",allowReply:Boolean=true):Boolean {
         if(!config.enabled) return false
         if(Build.VERSION.SDK_INT>=33 &&
             ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
@@ -148,7 +148,7 @@ object AlarmNotifications {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(open).setAutoCancel(true)
-        listOf("yes" to "Ich komme","delayed" to "Später","no" to "Ich komme nicht")
+        if(allowReply) listOf("yes" to "Ich komme","delayed" to "Später","no" to "Ich komme nicht")
             .forEachIndexed { index,action ->
                 val intent=Intent(context,AlarmActionReceiver::class.java)
                     .putExtra("incident_id",incidentId).putExtra("unit_id",unitId)

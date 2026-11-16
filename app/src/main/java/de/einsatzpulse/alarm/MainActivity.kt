@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +34,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -62,7 +66,7 @@ class MainActivity:ComponentActivity() {
         }
         setContent {
             MaterialTheme(colorScheme=alarmColorScheme) {
-                AlarmApp(applicationContext)
+                AlarmApp(this@MainActivity)
             }
         }
     }
@@ -137,6 +141,7 @@ private fun AlarmApp(context:Context) {
     val snackbar=remember { SnackbarHostState() }
     val scope=rememberCoroutineScope()
     val scanContext=LocalContext.current
+    val lifecycleOwner=LocalLifecycleOwner.current
     val qrOptions=remember { GmsBarcodeScannerOptions.Builder()
         .setBarcodeFormats(Barcode.FORMAT_QR_CODE).enableAutoZoom().build() }
     var linked by remember { mutableStateOf(session.linked) }
@@ -149,6 +154,7 @@ private fun AlarmApp(context:Context) {
     var replyBusy by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) }
     var dashboard by remember { mutableStateOf<AlarmDashboard?>(null) }
+    var runtime by remember { mutableStateOf<AlarmRuntime?>(null) }
     var device by remember { mutableStateOf<AlarmDevice?>(null) }
     var error by remember { mutableStateOf("") }
     var selectedUnit by remember { mutableIntStateOf(0) }
@@ -165,8 +171,11 @@ private fun AlarmApp(context:Context) {
         if(!linked)return
         scope.launch {
             try {
+                val current=api.runtime()
+                runtime=current
                 device=api.device()
-                dashboard=api.dashboard()
+                dashboard=if(current.kind=="person") api.dashboard() else null
+                device?.let {AlarmForegroundSync.apply(context,current,it)}
                 lastSync=java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.GERMANY)
                     .format(java.util.Date())
                 error=""
@@ -174,15 +183,43 @@ private fun AlarmApp(context:Context) {
             } catch (e:Exception) { error=e.message ?: "Server derzeit nicht erreichbar" }
         }
     }
-    LaunchedEffect(linked) {
+    LaunchedEffect(linked,lifecycleOwner) {
         if(linked) {
-            // Sync on each newly linked session or app launch, even when the
-            // backend stores an old FCM token from before a token rotation.
             registerFcm()
-            while(true) {
-                refresh()
-                delay(30000)
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                var iteration=0
+                while(true) {
+                    // This loop stops on Activity.onStop; not background push.
+                    try {
+                    val current=api.runtime()
+                    runtime=current
+                    if(iteration%4==0 || device==null || device?.kind!=current.kind) {
+                        device=api.device()
+                        dashboard=if(current.kind=="person") api.dashboard() else null
+                    }
+                    device?.let {AlarmForegroundSync.apply(context,current,it)}
+                    lastSync=java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.GERMANY)
+                        .format(java.util.Date())
+                    error=""
+                } catch(e:kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch(e:Exception) {
+                    error=e.message ?: "Server derzeit nicht erreichbar"
+                }
+                    iteration++
+                    delay(8000)
+                }
             }
+        }
+    }
+    // The administrator may temporarily preview ANY scene, irrespective of
+    // the assigned operational role. The server never grants extra rights.
+    val kiosk=runtime?.kind in setOf("hall","vehicle") || runtime?.testView==true
+    DisposableEffect(kiosk) {
+        val activity=context as? ComponentActivity
+        if(kiosk) activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            if(kiosk) activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
     Scaffold(
@@ -193,17 +230,25 @@ private fun AlarmApp(context:Context) {
                 title={Column {
                     Text("EINSATZPULSE",fontWeight=FontWeight.Black,
                         style=MaterialTheme.typography.titleLarge)
-                    Text("ALARM · NATIV",style=MaterialTheme.typography.labelSmall,color=mint)
+                    Text(when(runtime?.kind){
+                        "hall" -> "HALLENMONITOR"
+                        "vehicle" -> "FAHRZEUGMONITOR"
+                        else -> "ALARM · NATIV"
+                    },style=MaterialTheme.typography.labelSmall,color=mint)
                 }},
                 colors=TopAppBarDefaults.topAppBarColors(containerColor=navy),
                 actions={
+                    if(linked && kiosk) IconButton(onClick={tab=if(tab==2)0 else 2}) {
+                        Icon(if(tab==2)Icons.Default.ArrowBack else Icons.Default.Settings,
+                            "Geräteansicht umschalten",tint=mint)
+                    }
                     if(linked) IconButton(onClick={refresh()}) {
                         Icon(Icons.Default.Refresh,"Aktualisieren",tint=mint)
                     }
                 })
         },
         bottomBar={
-            if(linked) NavigationBar(containerColor=panel) {
+            if(linked && !kiosk) NavigationBar(containerColor=panel) {
                 listOf(Triple("Alarme",Icons.Default.Notifications,0),
                     Triple("Einheiten",Icons.Default.Groups,1),
                     Triple("Gerät",Icons.Default.Settings,2)).forEach { (name,icon,index)->
@@ -314,7 +359,9 @@ private fun AlarmApp(context:Context) {
                 if(error.isNotBlank()) Surface(color=crimson.copy(alpha=.14f)) {
                     Text("Verbindung: $error",color=crimson,modifier=Modifier.fillMaxWidth().padding(12.dp))
                 }
-                when(tab) {
+                if(kiosk && tab!=2 && runtime!=null) {
+                    NativeMonitorScene(runtime!!,lastSync,error,onSettings={tab=2})
+                } else when(tab) {
                     0 -> {
                         val all=dashboard?.incidents.orEmpty()
                             .filter { selectedUnit==0||it.unitId==selectedUnit }
@@ -428,6 +475,19 @@ private fun AlarmApp(context:Context) {
                                     Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                                         Text(config.label,fontWeight=FontWeight.Bold,
                                             style=MaterialTheme.typography.titleLarge)
+                                        Text("Servermodus: "+when(runtime?.kind ?: config.kind){
+                                            "hall"->"Hallenmonitor"
+                                            "vehicle"->"Fahrzeugmonitor"
+                                            else->"Einsatzkraft-App"
+                                        },color=mint,fontWeight=FontWeight.Bold)
+                                        Text("Zugewiesene Einheiten: "+
+                                            (runtime?.units?.joinToString(", "){it.name} ?: "Laden…"),
+                                            color=soft)
+                                        Text(if(runtime?.fcmConfigured==true)
+                                            "Server kann FCM senden, sofern Android registriert ist."
+                                            else "Direkter Online-Abruf aktiv. Für Hintergrundpush "+
+                                                "muss Firebase eingerichtet werden.",
+                                            color=soft,style=MaterialTheme.typography.bodySmall)
                                         Row {
                                             Text(if(config.enabled)"● Alarmierung eingeschaltet"
                                                 else "● Vom Server deaktiviert",
