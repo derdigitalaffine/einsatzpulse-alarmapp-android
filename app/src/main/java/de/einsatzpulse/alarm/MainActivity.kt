@@ -25,6 +25,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +33,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.delay
@@ -132,9 +136,14 @@ private fun AlarmApp(context:Context) {
     val api=remember { AlarmApi(context) }
     val snackbar=remember { SnackbarHostState() }
     val scope=rememberCoroutineScope()
+    val scanContext=LocalContext.current
+    val qrOptions=remember { GmsBarcodeScannerOptions.Builder()
+        .setBarcodeFormats(Barcode.FORMAT_QR_CODE).enableAutoZoom().build() }
     var linked by remember { mutableStateOf(session.linked) }
     var server by remember { mutableStateOf(session.server) }
     var code by remember { mutableStateOf("") }
+    var scannedOrigin by remember { mutableStateOf("") }
+    var qrNotice by remember { mutableStateOf("") }
     var label by remember { mutableStateOf(Build.MANUFACTURER+" "+Build.MODEL) }
     var busy by remember { mutableStateOf(false) }
     var replyBusy by remember { mutableStateOf("") }
@@ -217,10 +226,63 @@ private fun AlarmApp(context:Context) {
                         color=soft,style=MaterialTheme.typography.bodyLarge)
                     Card(colors=CardDefaults.cardColors(containerColor=panel),shape=r) {
                         Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-                            OutlinedTextField(server,{server=it},label={Text("HTTPS-Server")},
+                            OutlinedButton(
+                                onClick={
+                                    error=""
+                                    runCatching {
+                                        GmsBarcodeScanning.getClient(scanContext,qrOptions).startScan()
+                                            .addOnSuccessListener { barcode ->
+                                                val decoded=runCatching {
+                                                    PairingQr.parse(barcode.rawValue.orEmpty())
+                                                }
+                                                decoded.onSuccess { pair ->
+                                                    val oldServer=server.trim().trimEnd('/')
+                                                    val different=oldServer.isNotBlank() &&
+                                                        !oldServer.equals(pair.server,ignoreCase=true)
+                                                    server=pair.server
+                                                    code=pair.code
+                                                    scannedOrigin=pair.server
+                                                    qrNotice=if(different)
+                                                        "Achtung: QR-Code enthält einen anderen Server. Adresse vor dem Verbinden prüfen."
+                                                        else "QR-Code eingelesen. Server prüfen und dann Verbindung bestätigen."
+                                                    error=""
+                                                }.onFailure {
+                                                    error=it.message ?: "QR-Code ist ungültig"
+                                                }
+                                            }
+                                            .addOnFailureListener {
+                                                error="QR-Scanner nicht verfügbar. Google Play-Dienste prüfen oder Einmalcode manuell eingeben."
+                                            }
+                                    }.onFailure {
+                                        error="Scanner konnte nicht gestartet werden: ${it.message}"
+                                    }
+                                },
+                                modifier=Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.QrCodeScanner,null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("QR-Code scannen")
+                            }
+                            if(scannedOrigin.isNotBlank()) {
+                                Surface(
+                                    color=mint.copy(alpha=.14f),
+                                    shape=RoundedCornerShape(12.dp),
+                                    modifier=Modifier.fillMaxWidth()
+                                ) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text("Erkannter Server: $scannedOrigin",
+                                            fontWeight=FontWeight.Bold,color=mint)
+                                        Text(qrNotice,color=soft,
+                                            style=MaterialTheme.typography.bodySmall)
+                                        Text("Die Kopplung erfolgt erst mit „Gerät verbinden“.",
+                                            color=soft,style=MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                            OutlinedTextField(server,{server=it;scannedOrigin="";qrNotice=""},label={Text("HTTPS-Server")},
                                 placeholder={Text("https://einsatz.example.org")},singleLine=true,
                                 modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(code,{code=it},label={Text("Einmaliger Kopplungscode")},
+                            OutlinedTextField(code,{code=it;scannedOrigin="";qrNotice=""},label={Text("Einmaliger Kopplungscode")},
                                 singleLine=true,modifier=Modifier.fillMaxWidth())
                             OutlinedTextField(label,{label=it},label={Text("Gerätename")},
                                 singleLine=true,modifier=Modifier.fillMaxWidth())
@@ -229,7 +291,7 @@ private fun AlarmApp(context:Context) {
                                 scope.launch {
                                     try {
                                         api.activate(server,code,label)
-                                        code="";linked=true;tab=0
+                                        code="";scannedOrigin="";qrNotice="";linked=true;tab=0
                                         snackbar.showSnackbar("Gerät erfolgreich mit dem Server gekoppelt")
                                     } catch(e:Exception) {error=e.message?:"Kopplung fehlgeschlagen"}
                                     finally {busy=false}
@@ -243,7 +305,7 @@ private fun AlarmApp(context:Context) {
                         }
                     }
                     if(error.isNotBlank()) Text(error,color=crimson)
-                    Text("Den Code erzeugst du in EinsatzPulse → Meine Alarme → Android-Geräte.",
+                    Text("QR-Code oder Einmalcode erzeugst du in EinsatzPulse → Meine Alarme → Android-Geräte.",
                         color=mint,style=MaterialTheme.typography.bodyMedium)
                     Text("Ergänzender Alarmkanal. Kein Ersatz für DME, Funk und Leitstelle.",
                         color=soft,style=MaterialTheme.typography.bodySmall)

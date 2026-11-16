@@ -15,8 +15,8 @@ android {
   applicationId = "de.einsatzpulse.alarm"
   minSdk = 26
   targetSdk = 35
-  versionCode = 3
-  versionName = "0.3.0-beta.1"
+  versionCode = 4
+  versionName = "0.4.0-beta.1"
  }
  buildTypes {
   release { isMinifyEnabled = false }
@@ -41,6 +41,7 @@ dependencies {
  implementation("com.squareup.okhttp3:okhttp:4.12.0")
  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
  implementation("com.google.firebase:firebase-messaging:24.1.1")
+ implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
  implementation("androidx.work:work-runtime-ktx:2.10.1")
  testImplementation("junit:junit:4.13.2")
  testImplementation("org.json:json:20240303")

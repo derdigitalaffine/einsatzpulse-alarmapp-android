@@ -1,6 +1,6 @@
 # EinsatzPulse Alarm · Android
 
-**Aktueller Stand: v0.3.0-beta.1** – Multi-Einheiten-Zustellung, kontogebundene FCM-Jobs, persistente Quittierungen und sicherer Gerätewiderruf.
+**Aktueller Stand: v0.4.0-beta.1** – Multi-Einheiten-Zustellung, kontogebundene FCM-Jobs, persistente Quittierungen und sicherer Gerätewiderruf.
 
 Native **Android-Alarm-App für EinsatzPulse** auf Kotlin/Jetpack Compose + Material 3.
 Eigenes Projekt/Repository nach dem Gradle-/APK-CI-Muster von Tromuwelle Android.
@@ -84,3 +84,18 @@ an den Server. Das FCM-Token selbst steht nicht im WorkManager-Speicher.
 Beim App-Start wird eine erneute Registrierung versucht, auch wenn der
 Server noch ein altes Token gespeichert hat. Ein fehlendes oder widerrufenes
 Serverrecht wird nicht durch unbeschränkte Wiederholungen umgangen.
+
+## v0.4: QR-Kopplung
+
+In **EinsatzPulse Web → Meine Alarme → Android-Geräte** erzeugt der Server
+einen PNG-QR-Code zur Einmal-Kopplung. Die Android-App öffnet über
+**QR-Code scannen** die Google Code Scanner-Oberfläche (Google Play Dienste),
+ohne der App eine Kamera-Berechtigung zu geben. Der Scanner prüft strikt
+das QR-Format, die Protokollversion, die HTTPS-Serveradresse, den Code und die
+Ablaufzeit. Die Serveradresse wird vor dem Koppeln angezeigt und muss bewusst
+durch **Gerät verbinden** bestätigt werden. Der alte manuelle Weg bleibt
+für Geräte ohne Google Play Dienste verfügbar.
+
+QR-Codes sind zehn Minuten gültige, einmalig verwendbare Zugangs-Credentials.
+Nicht fotografieren, weitergeben oder öffentlich anzeigen; kein automatischer
+Kontozugriff nach dem Scannen. Der Server benötigt eine gültige HTTPS-Origin.
