@@ -360,7 +360,7 @@ private fun AlarmApp(context:Context) {
                     Text("Verbindung: $error",color=crimson,modifier=Modifier.fillMaxWidth().padding(12.dp))
                 }
                 if(kiosk && tab!=2 && runtime!=null) {
-                    NativeMonitorScene(runtime!!,lastSync,onSettings={tab=2})
+                    NativeMonitorScene(runtime!!,lastSync,error,onSettings={tab=2})
                 } else when(tab) {
                     0 -> {
                         val all=dashboard?.incidents.orEmpty()

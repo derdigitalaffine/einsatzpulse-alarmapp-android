@@ -30,7 +30,7 @@ private fun heading(kind:String)=when(kind) {
 
 /** Native kiosk surface. Only server-scoped incidents; never fixture actions. */
 @Composable
-fun NativeMonitorScene(runtime:AlarmRuntime,lastSync:String,onSettings:()->Unit) {
+fun NativeMonitorScene(runtime:AlarmRuntime,lastSync:String,connectionError:String,onSettings:()->Unit) {
     val demo=runtime.testView
     val incidents=runtime.incidents
     val active=incidents.isNotEmpty() && !demo
@@ -56,6 +56,20 @@ fun NativeMonitorScene(runtime:AlarmRuntime,lastSync:String,onSettings:()->Unit)
                 }
                 IconButton(onClick=onSettings) {
                     Icon(Icons.Default.Settings,"Geräteinformationen",tint=pale)
+                }
+            }
+        }
+        if(connectionError.isNotBlank()) item {
+            Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF87292F)),
+                shape=RoundedCornerShape(14.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("VERBINDUNG UNTERBROCHEN – ANZEIGE KANN VERALTET SEIN",
+                        color=Color.White,fontWeight=FontWeight.Black,
+                        style=MaterialTheme.typography.titleMedium)
+                    Text("Letzter erfolgreicher Datenabruf: "+lastSync,
+                        color=Color.White,style=MaterialTheme.typography.bodySmall)
+                    Text("Keine sichere Aussage über aktuelle Einsätze. BOS-Alarmwege prüfen.",
+                        color=Color.White,style=MaterialTheme.typography.bodySmall)
                 }
             }
         }
